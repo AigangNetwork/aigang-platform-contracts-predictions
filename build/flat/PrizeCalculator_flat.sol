@@ -21,7 +21,7 @@ contract PrizeCalculator is IPrizeCalculator {
             
             uint returnValue = 0;
             
-            returnValue = _predictionTotalTokens.mul(_forecastTokens).div(_winOutputTotalTokens);
+            returnValue = _forecastTokens.mul(_predictionTotalTokens).div(_winOutputTotalTokens);
            
             return returnValue;
         }

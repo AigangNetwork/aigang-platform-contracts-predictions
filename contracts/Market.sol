@@ -1,6 +1,6 @@
 pragma solidity ^0.4.23;
 
-import "./utils/Owned.sol";
+import "./utils/OwnedWithExecutor.sol";
 import "./utils/SafeMath.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IResultStorage.sol";
@@ -31,7 +31,8 @@ contract Market is Owned {
         uint8 outcomesCount;
         mapping(uint8 => OutcomesForecasts) outcomes; 
         uint totalTokens;          
-        uint totalForecasts;          
+        uint totalForecasts; 
+        uint totalTokensNeedForPayout;        
         address resultStorage;   
         address prizeCalculator;
     }
@@ -93,7 +94,7 @@ contract Market is Owned {
         PredictionStatus _status,    
         uint8 _outcomesCount,  
         uint _totalTokens,   
-        address _resultStorage, address _prizeCalculator) public onlyOwner notPaused {
+        address _resultStorage, address _prizeCalculator) public onlyAllowed notPaused {
         
         predictions[_id].endTime = _endTime;
         predictions[_id].fee = _fee;
@@ -110,7 +111,7 @@ contract Market is Owned {
     // TODO: reconfigure fallback from AIX token 
     function addForecast(uint32 _predictionId, address _sender, uint _amount, uint8 _outcomeId) 
             public 
-            onlyOwner 
+            onlyAllowed 
             notPaused 
             validPrediction(_predictionId, _amount, _outcomeId) {
 
@@ -129,14 +130,21 @@ contract Market is Owned {
 
     function changePredictionStatus(uint32 _predictionId, PredictionStatus _status) 
             public 
-            onlyOwner {
+            onlyAllowed {
         require(predictions[_predictionId].status != PredictionStatus.NotSet, "Prediction not exist");
         require(_status != PredictionStatus.Resolved, "Use resolve function");
+        require(_status != PredictionStatus.Canceled, "Use cancel function");
         emit PredictionStatusChanged(_predictionId, predictions[_predictionId].status, _status);
         predictions[_predictionId].status = _status;            
     }
 
-    function resolve(uint32 _predictionId) public onlyOwner {
+    function cancel(uint32 _predictionId) public onlyAllowed {    
+        emit PredictionStatusChanged(_predictionId, predictions[_predictionId].status, PredictionStatus.Canceled);
+        predictions[_predictionId].status = PredictionStatus.Canceled;    
+        predictions[_predictionId].totalTokensNeedForPayout = predictions[_predictionId].totalTokens;
+    }
+
+    function resolve(uint32 _predictionId) public onlyAllowed {
         require(predictions[_predictionId].status == PredictionStatus.Published, "Prediction must be Published");
         require(predictions[_predictionId].endTime < now, "Prediction is not finished");
 
@@ -144,22 +152,23 @@ contract Market is Owned {
         require(winningOutcomeId <= predictions[_predictionId].outcomesCount && winningOutcomeId > 0, "OutcomeId is not valid");
 
         emit PredictionStatusChanged(_predictionId, predictions[_predictionId].status, PredictionStatus.Resolved);
-        predictions[_predictionId].status = PredictionStatus.Resolved;      
+        predictions[_predictionId].status = PredictionStatus.Resolved;    
+        predictions[_predictionId].totalTokensNeedForPayout = predictions[_predictionId].totalTokens;
         
         emit PredictionResolved(_predictionId, winningOutcomeId);
     }
 
-    function payOut(uint32 _predictionId, uint indexFrom, uint indexTo) public {
+    function payOut(uint32 _predictionId, uint _indexFrom, uint _indexTo) public {
         require(predictions[_predictionId].status == PredictionStatus.Resolved, "Prediction should be resolved");
 
         uint8 winningOutcomeId = IResultStorage(predictions[_predictionId].resultStorage).getResult(_predictionId);
 
-        require(indexFrom <= indexTo && indexTo < predictions[_predictionId].outcomes[winningOutcomeId].forecasts.length, "Index is not valid");
+        require(_indexFrom <= _indexTo && _indexTo < predictions[_predictionId].outcomes[winningOutcomeId].forecasts.length, "Index is not valid");
 
         //predictions[_predictionId].totalTokens
         IPrizeCalculator calculator = IPrizeCalculator(predictions[_predictionId].prizeCalculator);
         
-         for (uint i = indexFrom; i <= indexTo; i++) {
+         for (uint i = _indexFrom; i <= _indexTo; i++) {
             Forecast storage forecast = predictions[_predictionId].outcomes[winningOutcomeId].forecasts[i];
 
             if (forecast.paidOut == 0) {
@@ -171,63 +180,50 @@ contract Market is Owned {
                 assert(winAmount > 0);
                 assert(IERC20(token).transfer(forecast.user, winAmount));
                 forecast.paidOut = winAmount;
+                predictions[_predictionId].totalTokensNeedForPayout = predictions[_predictionId].totalTokensNeedForPayout.sub(winAmount);
                 emit PaidOut(_predictionId, winningOutcomeId, i, forecast.user, winAmount);
             }
         }          
     }
 
+    // Owner can refund users forecasts
+    function refundUser(uint32 _predictionId, uint8 _outcomeId, uint _indexFrom, uint _indexTo) public onlyAllowed {
+        require (predictions[_predictionId].status != PredictionStatus.Resolved);
+        
+        performRefund(_predictionId, _outcomeId, _indexFrom, _indexTo);
+    }
+   
+    // User can refund when status is CANCELED
+    function refund(uint32 _predictionId, uint8 _outcomeId, uint _indexFrom, uint _indexTo) public statusIsCanceled(_predictionId) {
+        
+        performRefund(_predictionId, _outcomeId, _indexFrom, _indexTo);
+    }
+
+     function performRefund(uint32 _predictionId, uint8 _outcomeId, uint _indexFrom, uint _indexTo) private {
+        require(_indexFrom <= _indexTo && _indexTo < predictions[_predictionId].outcomes[_outcomeId].forecasts.length, "Index is not valid");
+
+        for (uint i = _indexFrom; i <= _indexTo; i++) {
+            require(predictions[_predictionId].outcomes[_outcomeId].forecasts[i].paidOut == 0, "Already paid");  
+
+            uint refundAmount = predictions[_predictionId].outcomes[_outcomeId].forecasts[i].amount;
+            
+            predictions[_predictionId].totalTokensNeedForPayout = predictions[_predictionId].totalTokensNeedForPayout.sub(refundAmount);
+            predictions[_predictionId].outcomes[_outcomeId].totalTokens = predictions[_predictionId].outcomes[_outcomeId].totalTokens.sub(refundAmount);
+            predictions[_predictionId].outcomes[_outcomeId].forecasts[i].paidOut = refundAmount;
+                                                        
+            assert(IERC20(token).transfer(predictions[_predictionId].outcomes[_outcomeId].forecasts[i].user, refundAmount)); 
+            emit Refunded(predictions[_predictionId].outcomes[_outcomeId].forecasts[i].user, _predictionId, _outcomeId, i, refundAmount);
+        }
+     }
+
+    //////////
+    // View
+    //////////
     function getForecast(uint32 _predictionId, uint8 _outcomeId, uint _index) public view returns(address, uint, uint) {
         return (predictions[_predictionId].outcomes[_outcomeId].forecasts[_index].user,
             predictions[_predictionId].outcomes[_outcomeId].forecasts[_index].amount,
             predictions[_predictionId].outcomes[_outcomeId].forecasts[_index].paidOut);
     }
-
-    //////////
-    // Refund
-    //////////
-    // Owner can refund users forecasts
-    function refundUser(address _user, uint32 _predictionId, uint8 _outcomeId, uint _index) public onlyOwner {
-        require (predictions[_predictionId].status != PredictionStatus.Resolved);
-        
-        performRefund(_user,  _predictionId, _outcomeId, _index);
-    }
-   
-    // User can refund when status is CANCELED
-    function getRefund(uint32 _predictionId, uint8 _outcomeId) public statusIsCanceled(_predictionId) {
-               
-        searchRefund(msg.sender,  _predictionId, _outcomeId);
-    }
-   
-    function searchRefund(address _owner, uint32 _predictionId, uint8 _outcomeId) private {
-        require(predictions[_predictionId].totalTokens > 0, "Prediction token pool is empty");
-        require(walletPredictions[_owner].length > 0, "User dont have forecasts");
-
-        uint i;
-
-        for (i = 0; i < walletPredictions[_owner].length; i++) {
-            if (walletPredictions[_owner][i].predictionId == _predictionId 
-                    && walletPredictions[_owner][i].outcomeId == _outcomeId
-                    && predictions[_predictionId].outcomes[_outcomeId].forecasts[walletPredictions[_owner][i].positionIndex].paidOut == 0) {
-                i = walletPredictions[_owner][i].positionIndex;
-                break;
-            }
-        }
-
-        performRefund(_owner, _predictionId, _outcomeId, i);        
-    }
-
-     function performRefund(address _owner, uint32 _predictionId, uint8 _outcomeId, uint _index) private {
-        require(predictions[_predictionId].outcomes[_outcomeId].forecasts[_index].paidOut == 0, "Already paid");  
-
-        uint refundAmount = predictions[_predictionId].outcomes[_outcomeId].forecasts[_index].amount;
-        
-        predictions[_predictionId].totalTokens = predictions[_predictionId].totalTokens.sub(refundAmount);
-        predictions[_predictionId].outcomes[_outcomeId].totalTokens = predictions[_predictionId].outcomes[_outcomeId].totalTokens.sub(refundAmount);
-        predictions[_predictionId].outcomes[_outcomeId].forecasts[_index].paidOut = refundAmount;
-                                                       
-        assert(IERC20(token).transfer(_owner, refundAmount)); 
-        emit Refunded(_owner, _predictionId, _outcomeId, _index, refundAmount);
-     }
 
     //////////
     // Safety Methods
