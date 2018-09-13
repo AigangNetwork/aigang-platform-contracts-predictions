@@ -68,7 +68,7 @@ contract Market is Owned {
         _;
     }
 
-     modifier statusIsCanceled(uint32 _predictionId) {
+    modifier statusIsCanceled(uint32 _predictionId) {
         require(predictions[_predictionId].status == PredictionStatus.Canceled, "Prediction is not canceled");
         _;
     }
@@ -91,14 +91,13 @@ contract Market is Owned {
         uint32 _id,
         uint _endTime,
         uint _fee,
-        PredictionStatus _status,    
         uint8 _outcomesCount,  
         uint _totalTokens,   
         address _resultStorage, address _prizeCalculator) public onlyAllowed notPaused {
         
         predictions[_id].endTime = _endTime;
         predictions[_id].fee = _fee;
-        predictions[_id].status = _status;
+        predictions[_id].status = PredictionStatus.Published;  
         predictions[_id].outcomesCount = _outcomesCount;
         predictions[_id].totalTokens = _totalTokens;
         predictions[_id].resultStorage = _resultStorage;
@@ -109,9 +108,9 @@ contract Market is Owned {
     
     // TODO: for testing  1,"0xca35b7d915458ef540ade6068dfe2f44e8fa733c",15,1
     // TODO: reconfigure fallback from AIX token 
-    function addForecast(uint32 _predictionId, address _sender, uint _amount, uint8 _outcomeId) 
+    function addForecast(uint32 _predictionId, uint _amount, uint8 _outcomeId) 
             public 
-            onlyAllowed 
+            // onlyAllowed 
             notPaused 
             validPrediction(_predictionId, _amount, _outcomeId) {
 
@@ -121,11 +120,11 @@ contract Market is Owned {
         predictions[_predictionId].totalTokens = predictions[_predictionId].totalTokens.add(amount);
         predictions[_predictionId].totalForecasts++;
         predictions[_predictionId].outcomes[_outcomeId].totalTokens = predictions[_predictionId].outcomes[_outcomeId].totalTokens.add(_amount);
-        predictions[_predictionId].outcomes[_outcomeId].forecasts.push(Forecast(_sender, amount, 0));
+        predictions[_predictionId].outcomes[_outcomeId].forecasts.push(Forecast(msg.sender, amount, 0));
        
-        walletPredictions[_sender].push(ForecastIndex(_predictionId, _outcomeId, predictions[_predictionId].outcomes[_outcomeId].forecasts.length - 1));
+        walletPredictions[msg.sender].push(ForecastIndex(_predictionId, _outcomeId, predictions[_predictionId].outcomes[_outcomeId].forecasts.length - 1));
 
-        emit ForecastAdded(_predictionId, _outcomeId, _sender);
+        emit ForecastAdded(_predictionId, _outcomeId, msg.sender);
     }
 
     function changePredictionStatus(uint32 _predictionId, PredictionStatus _status) 
@@ -158,7 +157,7 @@ contract Market is Owned {
         emit PredictionResolved(_predictionId, winningOutcomeId);
     }
 
-    function payOut(uint32 _predictionId, uint _indexFrom, uint _indexTo) public {
+    function payout(uint32 _predictionId, uint _indexFrom, uint _indexTo) public {
         require(predictions[_predictionId].status == PredictionStatus.Resolved, "Prediction should be resolved");
 
         uint8 winningOutcomeId = IResultStorage(predictions[_predictionId].resultStorage).getResult(_predictionId);

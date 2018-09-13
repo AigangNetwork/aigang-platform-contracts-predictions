@@ -4,42 +4,212 @@ const PrizeCalculator = artifacts.require('./PrizeCalculator.sol')
 const ResultStorage = artifacts.require('./ResultStorage.sol')
 
 const BigNumber = web3.BigNumber
-const assert = require('chai').assert
+contract('Market', accounts => {
+  let owner = accounts[0]
+  let marketInstance
+  let prizeCalculatorInstance
+  let resultStorageInstance
+  let testTokenInstance
+  describe('#prediction', async () => {
+    let id
+    beforeEach(async () => {
+      marketInstance = await Market.new()
+      prizeCalculatorInstance = await PrizeCalculator.new()
+      resultStorageInstance = await ResultStorage.new()
+      testTokenInstance = await TestToken.new()
 
-//import { latestBlock, getTime } from "./utils.js"
+      await marketInstance.initialize(testTokenInstance.address)
 
-let testToken
+      id = 123123123
+      const endTime = Date.now() + 60
+      const feeInWeis = web3.toWei(12, 'ether')
+      const outcomesCount = 2
+      const totalTokens = 1000
 
-contract('Market', ([miner, owner, user1, user2]) => {
-  let token
-  let market
-  let prizeCalculator
-  let resultStorage
+      await marketInstance.addPrediction(
+        id,
+        endTime,
+        feeInWeis,
+        outcomesCount,
+        totalTokens,
+        resultStorageInstance.address,
+        prizeCalculatorInstance.address
+      )
+    })
 
-  let addresses = [
-    '0xD7dFCEECe5bb82F397f4A9FD7fC642b2efB1F565',
-    '0x501AC3B461e7517D07dCB5492679Cc7521AadD42',
-    '0xDc76C949100FbC502212c6AA416195Be30CE0732',
-    '0x2C49e8184e468F7f8Fb18F0f29f380CD616eaaeb',
-    '0xB3d3c445Fa47fe40a03f62d5D41708aF74a5C387',
-    '0x34D468BFcBCc0d83F4DF417E6660B3Cf3e14F62A',
-    '0x27E6FaE913861180fE5E95B130d4Ae4C58e2a4F4',
-    '0x7B199FAf7611421A02A913EAF3d150E359718C2B',
-    '0x086282022b8D0987A30CdD508dBB3236491F132e',
-    '0xdd39B760748C1CA92133FD7Fc5448F3e6413C138',
-    '0x0868411cA03e6655d7eE957089dc983d74b9Bf1A',
-    '0x4Ec993E1d6980d7471Ca26BcA67dE6C513165922'
-  ]
+    it('add prediction', async () => {
+      const prediction = await marketInstance.predictions.call(id)
+      const predictionStatus = prediction[2].toNumber()
 
-  it('#initialize accepts token', async function() {
-    const market = await Market.new()
-    market.initialize('0x0000000000000000000000000000000000000123')
-    const token = await market.token()
-    assert.equal(token, '0x0000000000000000000000000000000000000123', '== token address')
+      assert.equal(1, predictionStatus)
+    })
+
+    it('change prediction status', async () => {
+      await marketInstance.changePredictionStatus(id, 3)
+
+      const prediction = await marketInstance.predictions.call(id)
+      const predictionStatus = prediction[2].toNumber()
+
+      assert.equal(3, predictionStatus)
+    })
+
+    it('cancel prediction', async () => {
+      await marketInstance.cancel(id)
+
+      const prediction = await marketInstance.predictions.call(id)
+      const predictionStatus = prediction[2].toNumber()
+
+      assert.equal(4, predictionStatus)
+    })
+
+    it('resolve prediction', async () => {
+      const id = 1342
+      const endTime = new Date().getTime() / 1000 - 1000
+      const feeInWeis = web3.toWei(12, 'ether')
+      const outcomesCount = 2
+      const totalTokens = 1000
+
+      await marketInstance.addPrediction(
+        id,
+        endTime,
+        feeInWeis,
+        outcomesCount,
+        totalTokens,
+        resultStorageInstance.address,
+        prizeCalculatorInstance.address
+      )
+
+      const outcomeId = 1
+      await resultStorageInstance.setOutcome(id, outcomeId)
+      await marketInstance.resolve(id)
+
+      const prediction = await marketInstance.predictions.call(id)
+      const predictionStatus = prediction[2].toNumber()
+
+      assert.equal(2, predictionStatus)
+    })
+
+    it('payout prediction', async () => {
+      // Creating prediction
+      const id = 1342
+      const endTime = new Date().getTime() / 1000 + 2
+      const feeInWeis = web3.toWei(12, 'ether')
+      const outcomesCount = 2
+      const totalTokens = web3.toWei(0, 'ether')
+
+      await marketInstance.addPrediction(
+        id,
+        endTime,
+        feeInWeis,
+        outcomesCount,
+        totalTokens,
+        resultStorageInstance.address,
+        prizeCalculatorInstance.address
+      )
+
+      await testTokenInstance.transfer(marketInstance.address, totalTokens)
+
+      // Adding two forecast
+      const firstAmount = web3.toWei(112, 'ether')
+      const firstOutcomeId = 1
+      const secondAmount = web3.toWei(62, 'ether')
+      const secondOutcomeId = 2
+
+      await marketInstance.addForecast(id, firstAmount, firstOutcomeId, { from: accounts[1] })
+      await testTokenInstance.transfer(marketInstance.address, firstAmount)
+      await marketInstance.addForecast(id, secondAmount, secondOutcomeId)
+      await testTokenInstance.transfer(marketInstance.address, secondAmount)
+
+      // Sleep to make prediction endTime < now
+      await sleep(3000)
+
+      // Setting outcome and making prediction resolved
+      await resultStorageInstance.setOutcome(id, firstOutcomeId)
+      await marketInstance.resolve(id)
+
+      // Paying out
+      await marketInstance.payout(id, 0, 0)
+
+      const forecast = await marketInstance.getForecast(id, firstOutcomeId, 0)
+
+      assert(forecast[2].toNumber() != 0, 'Paid sum is 0')
+    })
   })
 
-  before(async function() {
-    // runs before all tests in this block
-    testToken = await TestToken.new()
+  describe('#forecast', async () => {
+    let predictionId
+    let feeInWeis
+
+    beforeEach(async () => {
+      marketInstance = await Market.new()
+      prizeCalculatorInstance = await PrizeCalculator.new()
+      resultStorageInstance = await ResultStorage.new()
+      const testTokenInstance = await TestToken.new()
+
+      await marketInstance.initialize(testTokenInstance.address)
+
+      predictionId = 5555
+      const endTime = Date.now() + 60
+      feeInWeis = web3.toWei(12, 'ether')
+      const outcomesCount = 4
+      const totalTokens = web3.toWei(1000, 'ether')
+
+      await marketInstance.addPrediction(
+        predictionId,
+        endTime,
+        feeInWeis,
+        outcomesCount,
+        totalTokens,
+        resultStorageInstance.address,
+        prizeCalculatorInstance.address
+      )
+
+      await testTokenInstance.transfer(marketInstance.address, totalTokens)
+    })
+
+    it('create forecast', async () => {
+      const firstAmount = web3.toWei(100, 'ether')
+      const firstOutcomeId = 1
+      const secondAmount = web3.toWei(75, 'ether')
+      const secondOutcomeId = 2
+
+      await marketInstance.addForecast(predictionId, firstAmount, firstOutcomeId)
+      await marketInstance.addForecast(predictionId, secondAmount, secondOutcomeId)
+
+      const firstForecast = await marketInstance.getForecast(predictionId, firstOutcomeId, 0)
+      const secondForecast = await marketInstance.getForecast(predictionId, secondOutcomeId, 0)
+
+      assert.equal(firstForecast[0], owner)
+      assert.equal(firstForecast[1].toNumber(), firstAmount - feeInWeis)
+      assert.equal(secondForecast[1].toNumber(), secondAmount - feeInWeis)
+    })
+
+    it('refund forecast', async () => {
+      // Adding two forecast
+      const firstAmount = web3.toWei(112, 'ether')
+      const firstOutcomeId = 1
+      const secondAmount = web3.toWei(62, 'ether')
+      const secondOutcomeId = 2
+
+      await marketInstance.addForecast(predictionId, firstAmount, firstOutcomeId, { from: accounts[3] })
+      await testTokenInstance.transfer(marketInstance.address, firstAmount)
+      await marketInstance.addForecast(predictionId, secondAmount, secondOutcomeId)
+      await testTokenInstance.transfer(marketInstance.address, secondAmount)
+
+      await marketInstance.cancel(predictionId)
+      await marketInstance.refund(predictionId, firstOutcomeId, 0, 0)
+
+      const forecast = await marketInstance.getForecast(predictionId, firstOutcomeId, 0)
+
+      assert.equal(forecast[2].toNumber(), firstAmount - feeInWeis)
+    })
   })
 })
+
+const sleep = milliseconds => {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve()
+    }, milliseconds)
+  })
+}

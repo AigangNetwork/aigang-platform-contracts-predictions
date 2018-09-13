@@ -6,27 +6,27 @@ import "../contracts/PrizeCalculator.sol";
 import "../contracts/utils/SafeMath.sol";
 
 contract TestPrizeCalculator {
-   function test_ping() public {
-        Assert.equal(true, true, "Ping");
-   }
+  //  function test_ping() public {
+  //       Assert.equal(true, true, "Ping");
+  //  }
 
-  function test_happyflow() public {
-    IPrizeCalculator c = new PrizeCalculator();
+  // function test_happyflow() public {
+  //   IPrizeCalculator c = new PrizeCalculator();
 
-    uint result = c.calculatePrizeAmount(5000, 200, 10);
+  //   uint result = c.calculatePrizeAmount(5000, 200, 10);
 
-    Assert.equal(result, 250, "Prize should be 250");
-  }
+  //   Assert.equal(result, 250, "Prize should be 250");
+  // }
 
-  function test_happyflow_ether() public {
-    IPrizeCalculator c = new PrizeCalculator();
+  // function test_happyflow_ether() public {
+  //   IPrizeCalculator c = new PrizeCalculator();
 
-    uint result = c.calculatePrizeAmount(5000 ether, 200 ether, 10 ether);
-    Assert.equal(result, 250 ether, "Prize should be 250");
+  //   uint result = c.calculatePrizeAmount(5000 ether, 200 ether, 10 ether);
+  //   Assert.equal(result, 250 ether, "Prize should be 250");
 
-    result = c.calculatePrizeAmount(99999 ether, 99999 ether, 99999 ether);
-    Assert.equal(result, 99999 ether, "Prize should be 99999");
-  }
+  //   result = c.calculatePrizeAmount(99999 ether, 99999 ether, 99999 ether);
+  //   Assert.equal(result, 99999 ether, "Prize should be 99999");
+  // }
 
 //   function test_revert() {
 //     PrizeCalculator c = new PrizeCalculator();
