@@ -20,7 +20,7 @@ contract('Market', accounts => {
 
       await marketInstance.initialize(testTokenInstance.address)
 
-      id = 123123123
+      id = web3.toAscii('18fda5cf3a7a4bc999e3400f49401266')
       const endTime = Date.now() + 60
       const feeInWeis = web3.toWei(12, 'ether')
       const outcomesCount = 2
@@ -91,7 +91,7 @@ contract('Market', accounts => {
 
     it('payout prediction', async () => {
       // Creating prediction
-      const id = 1342
+      const id = web3.toAscii('18fda5cf3a7a4bc999e3400f49401264')
       const endTime = new Date().getTime() / 1000 + 2
       const feeInWeis = web3.toWei(12, 'ether')
       const outcomesCount = 2
@@ -107,18 +107,22 @@ contract('Market', accounts => {
         prizeCalculatorInstance.address
       )
 
-      await testTokenInstance.transfer(marketInstance.address, totalTokens)
-
-      // Adding two forecast
+      // Adding two forecasts
       const firstAmount = web3.toWei(112, 'ether')
       const firstOutcomeId = 1
       const secondAmount = web3.toWei(62, 'ether')
       const secondOutcomeId = 2
 
+      await testTokenInstance.transfer(marketInstance.address, totalTokens)
+      await testTokenInstance.transfer(accounts[1], firstAmount)
+
+      await testTokenInstance.approveAndCall(marketInstance.address, firstAmount, id, {
+        from: accounts[1]
+      })
+      await testTokenInstance.approveAndCall(marketInstance.address, secondAmount, id)
+
       await marketInstance.addForecast(id, firstAmount, firstOutcomeId, { from: accounts[1] })
-      await testTokenInstance.transfer(marketInstance.address, firstAmount)
       await marketInstance.addForecast(id, secondAmount, secondOutcomeId)
-      await testTokenInstance.transfer(marketInstance.address, secondAmount)
 
       // Sleep to make prediction endTime < now
       await sleep(3000)
@@ -144,11 +148,10 @@ contract('Market', accounts => {
       marketInstance = await Market.new()
       prizeCalculatorInstance = await PrizeCalculator.new()
       resultStorageInstance = await ResultStorage.new()
-      const testTokenInstance = await TestToken.new()
+      testTokenInstance = await TestToken.new()
 
       await marketInstance.initialize(testTokenInstance.address)
-
-      predictionId = 5555
+      predictionId = web3.toAscii('18fda5cf3a7a4999e3400f49401264')
       const endTime = Date.now() + 60
       feeInWeis = web3.toWei(12, 'ether')
       const outcomesCount = 4
@@ -173,8 +176,13 @@ contract('Market', accounts => {
       const secondAmount = web3.toWei(75, 'ether')
       const secondOutcomeId = 2
 
+      await testTokenInstance.transfer(accounts[3], web3.toWei(75, 'ether'))
+
+      await testTokenInstance.approveAndCall(marketInstance.address, firstAmount, predictionId)
+      await testTokenInstance.approveAndCall(marketInstance.address, secondAmount, predictionId, { from: accounts[3] })
+
       await marketInstance.addForecast(predictionId, firstAmount, firstOutcomeId)
-      await marketInstance.addForecast(predictionId, secondAmount, secondOutcomeId)
+      await marketInstance.addForecast(predictionId, secondAmount, secondOutcomeId, { from: accounts[3] })
 
       const firstForecast = await marketInstance.getForecast(predictionId, firstOutcomeId, 0)
       const secondForecast = await marketInstance.getForecast(predictionId, secondOutcomeId, 0)
@@ -191,10 +199,16 @@ contract('Market', accounts => {
       const secondAmount = web3.toWei(62, 'ether')
       const secondOutcomeId = 2
 
+      await testTokenInstance.transfer(accounts[3], web3.toWei(113, 'ether'))
+
+      await testTokenInstance.approveAndCall(marketInstance.address, firstAmount, predictionId, {
+        from: accounts[3]
+      })
+
+      await testTokenInstance.approveAndCall(marketInstance.address, secondAmount, predictionId)
+
       await marketInstance.addForecast(predictionId, firstAmount, firstOutcomeId, { from: accounts[3] })
-      await testTokenInstance.transfer(marketInstance.address, firstAmount)
       await marketInstance.addForecast(predictionId, secondAmount, secondOutcomeId)
-      await testTokenInstance.transfer(marketInstance.address, secondAmount)
 
       await marketInstance.cancel(predictionId)
       await marketInstance.refund(predictionId, firstOutcomeId, 0, 0)
