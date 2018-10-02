@@ -5,11 +5,13 @@ const ResultStorage = artifacts.require('./ResultStorage.sol')
 
 const BigNumber = web3.BigNumber
 contract('Market', accounts => {
+
   let owner = accounts[0]
   let marketInstance
   let prizeCalculatorInstance
   let resultStorageInstance
   let testTokenInstance
+
   describe('#prediction', async () => {
     let id
     beforeEach(async () => {
@@ -201,7 +203,7 @@ contract('Market', accounts => {
       // console.log(`OutcomeId : ${firstOutcomeIdHex}`)
       // console.log(`sum : ${predictionId+firstOutcomeIdHex}`)
 
-      await testTokenInstance.transfer(accounts[3], web3.toWei(75, 'ether'))
+      await testTokenInstance.transfer(accounts[3], web3.toWei(75, 'ether')) // give tokens to account 3
 
       await testTokenInstance.approveAndCall(marketInstance.address, firstAmount, predictionId + firstOutcomeIdHex)
       await testTokenInstance.approveAndCall(marketInstance.address, secondAmount, predictionId + secondOutcomeIdHex, {

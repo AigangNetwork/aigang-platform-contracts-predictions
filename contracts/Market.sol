@@ -34,7 +34,8 @@ contract Market is Owned {
         mapping(uint8 => OutcomesForecasts) outcomes; 
         uint totalTokens;          
         uint totalForecasts; 
-        uint totalTokensNeedForPayout;        
+        uint totalTokensNeedForPayout;  
+        uint totalTokensPaidout;     
         address resultStorage;   
         address prizeCalculator;
     }
@@ -100,7 +101,8 @@ contract Market is Owned {
         uint _fee,
         uint8 _outcomesCount,  
         uint _totalTokens,   
-        address _resultStorage, address _prizeCalculator) public onlyAllowed notPaused {
+        address _resultStorage, 
+        address _prizeCalculator) public onlyAllowed notPaused {
 
         predictions[_id].forecastEndUtc = _forecastEndUtc;
         predictions[_id].fee = _fee;
@@ -132,7 +134,7 @@ contract Market is Owned {
     function resolve(bytes32 _predictionId) public onlyAllowed {
         require(predictions[_predictionId].status == PredictionStatus.Published, "Prediction must be Published"); 
 
-        if (predictions[_predictionId].forecastEndUtc < now) // allow to close prediction earlear
+        if (predictions[_predictionId].forecastEndUtc < now) // allow to close prediction earliar
         {
             predictions[_predictionId].forecastEndUtc = now;
         }
@@ -168,7 +170,7 @@ contract Market is Owned {
                 assert(winAmount > 0);
                 assert(IERC20(token).transfer(forecast.user, winAmount));
                 forecast.paidOut = winAmount;
-                predictions[_predictionId].totalTokensNeedForPayout = predictions[_predictionId].totalTokensNeedForPayout.sub(winAmount);
+                predictions[_predictionId].totalTokensPaidout = predictions[_predictionId].totalTokensPaidout.add(winAmount);
                 emit PaidOut(_predictionId, winningOutcomeId, i, forecast.user, winAmount);
             }
         }          
@@ -194,7 +196,7 @@ contract Market is Owned {
 
             uint refundAmount = predictions[_predictionId].outcomes[_outcomeId].forecasts[i].amount;
             
-            predictions[_predictionId].totalTokensNeedForPayout = predictions[_predictionId].totalTokensNeedForPayout.sub(refundAmount);
+            predictions[_predictionId].totalTokensPaidout = predictions[_predictionId].totalTokensPaidout.add(refundAmount);
             predictions[_predictionId].outcomes[_outcomeId].totalTokens = predictions[_predictionId].outcomes[_outcomeId].totalTokens.sub(refundAmount);
             predictions[_predictionId].outcomes[_outcomeId].forecasts[i].paidOut = refundAmount;
                                                         
@@ -203,7 +205,7 @@ contract Market is Owned {
         }
     }
 
-    bytes public predictionId; // storage for 32 symbols prediction id
+    bytes public predictionId; // storage for 32 symbols prediction id extracted from data
 
     /// Called by token contract after Approval: this.TokenInstance.methods.approveAndCall()
     function receiveApproval(address _from, uint _amountOfTokens, address _token, bytes _data) 
@@ -220,9 +222,9 @@ contract Market is Owned {
         predictionId = _data;
         predictionId.length = 32;
         bytes32 predictionIdString = predictionId.bytesToBytes32();
-        predictionId = ""; // reset storage account
+        predictionId = ""; // reset storage
 
-        validatePrediction(predictionIdString, _amountOfTokens, outcomeId); // TODO review make sense to check here?
+        validatePrediction(predictionIdString, _amountOfTokens, outcomeId); 
 
         // Transfer tokens from sender to this contract
         require(IERC20(_token).transferFrom(_from, address(this), _amountOfTokens), "Tokens transfer failed.");
