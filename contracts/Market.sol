@@ -77,7 +77,7 @@ contract Market is Owned {
         _;
     }
 
-    function validatePrediction(bytes32 _id, uint _amount, uint8 _outcomeId) public view {
+    function validatePrediction(bytes32 _id, uint _amount, uint8 _outcomeId) private view {
         require(predictions[_id].status == PredictionStatus.Published, "Prediction is not published");
         require(predictions[_id].forecastEndUtc > now, "Forecasts are over");
         require(predictions[_id].outcomesCount >= _outcomeId && _outcomeId > 0, "Outcome id is not in range");
