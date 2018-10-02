@@ -1,8 +1,10 @@
+Compile: truffle compile  
+Migrate: truffle migrate  
+Test contracts: truffle test
 
+Test:  
+ truffle test --network default  
+ truffle test = truffle test --network development
 
-Compile:        truffle compile  
-Migrate:        truffle migrate  
-Test contracts: truffle test  
-  
 Files flattening command  
-sh ./make_flat.sh  
+sh ./make_flat.sh

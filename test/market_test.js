@@ -91,7 +91,8 @@ contract('Market', accounts => {
 
     it('payout prediction', async () => {
       // Creating prediction
-      const id = web3.toAscii('18fda5cf3a7a4bc999e3400f49401264')
+      predictionIdString = '18fda5cf3a7a4999e3400f4940126432'
+      const id = web3.fromAscii(predictionIdString) // result is hex 
       const endTime = new Date().getTime() / 1000 + 2
       const feeInWeis = web3.toWei(12, 'ether')
       const outcomesCount = 2
@@ -110,19 +111,28 @@ contract('Market', accounts => {
       // Adding two forecasts
       const firstAmount = web3.toWei(112, 'ether')
       const firstOutcomeId = 1
+
+      var firstOutcomeIdHex = firstOutcomeId.toString(16)
+      if (firstOutcomeIdHex.length === 1) {
+        firstOutcomeIdHex = "0" + firstOutcomeIdHex;
+      }
+
       const secondAmount = web3.toWei(62, 'ether')
       const secondOutcomeId = 2
+
+      var secondOutcomeIdHex = secondOutcomeId.toString(16)
+      if (secondOutcomeIdHex.length === 1) {
+        secondOutcomeIdHex = "0" + secondOutcomeIdHex;
+      }
 
       await testTokenInstance.transfer(marketInstance.address, totalTokens)
       await testTokenInstance.transfer(accounts[1], firstAmount)
 
-      await testTokenInstance.approveAndCall(marketInstance.address, firstAmount, id, {
+      await testTokenInstance.approveAndCall(marketInstance.address, firstAmount, id + firstOutcomeIdHex, {
         from: accounts[1]
       })
-      await testTokenInstance.approveAndCall(marketInstance.address, secondAmount, id)
+      await testTokenInstance.approveAndCall(marketInstance.address, secondAmount, id + secondOutcomeIdHex)
 
-      await marketInstance.addForecast(id, firstAmount, firstOutcomeId, { from: accounts[1] })
-      await marketInstance.addForecast(id, secondAmount, secondOutcomeId)
 
       // Sleep to make prediction endTime < now
       await sleep(3000)
@@ -151,7 +161,9 @@ contract('Market', accounts => {
       testTokenInstance = await TestToken.new()
 
       await marketInstance.initialize(testTokenInstance.address)
-      predictionId = web3.toAscii('18fda5cf3a7a4999e3400f49401264')
+      predictionIdString = '18fda5cf3a7a4999e3400f4940126432'
+      // predictionId = web3.toAscii(predictionIdString) // result is hex 
+      predictionId = web3.fromAscii(predictionIdString) // result is hex 
       const endTime = Date.now() + 60
       feeInWeis = web3.toWei(12, 'ether')
       const outcomesCount = 4
@@ -173,16 +185,28 @@ contract('Market', accounts => {
     it('create forecast', async () => {
       const firstAmount = web3.toWei(100, 'ether')
       const firstOutcomeId = 1
+      var firstOutcomeIdHex = firstOutcomeId.toString(16)
+      if (firstOutcomeIdHex.length === 1) {
+        firstOutcomeIdHex = "0" + firstOutcomeIdHex;
+      }
+
       const secondAmount = web3.toWei(75, 'ether')
       const secondOutcomeId = 2
+      var secondOutcomeIdHex = secondOutcomeId.toString(16)
+      if (secondOutcomeIdHex.length === 1) {
+        secondOutcomeIdHex = "0" + secondOutcomeIdHex;
+      }
+
+      // console.log(`PredictionID: ${predictionId}`)
+      // console.log(`OutcomeId : ${firstOutcomeIdHex}`)
+      // console.log(`sum : ${predictionId+firstOutcomeIdHex}`)
 
       await testTokenInstance.transfer(accounts[3], web3.toWei(75, 'ether'))
 
-      await testTokenInstance.approveAndCall(marketInstance.address, firstAmount, predictionId)
-      await testTokenInstance.approveAndCall(marketInstance.address, secondAmount, predictionId, { from: accounts[3] })
-
-      await marketInstance.addForecast(predictionId, firstAmount, firstOutcomeId)
-      await marketInstance.addForecast(predictionId, secondAmount, secondOutcomeId, { from: accounts[3] })
+      await testTokenInstance.approveAndCall(marketInstance.address, firstAmount, predictionId + firstOutcomeIdHex)
+      await testTokenInstance.approveAndCall(marketInstance.address, secondAmount, predictionId + secondOutcomeIdHex, {
+        from: accounts[3]
+      })
 
       const firstForecast = await marketInstance.getForecast(predictionId, firstOutcomeId, 0)
       const secondForecast = await marketInstance.getForecast(predictionId, secondOutcomeId, 0)
@@ -196,19 +220,27 @@ contract('Market', accounts => {
       // Adding two forecast
       const firstAmount = web3.toWei(112, 'ether')
       const firstOutcomeId = 1
+
+      var firstOutcomeIdHex = firstOutcomeId.toString(16)
+      if (firstOutcomeIdHex.length === 1) {
+        firstOutcomeIdHex = "0" + firstOutcomeIdHex;
+      }
+
       const secondAmount = web3.toWei(62, 'ether')
       const secondOutcomeId = 2
 
+      var secondOutcomeIdHex = secondOutcomeId.toString(16)
+      if (secondOutcomeIdHex.length === 1) {
+        secondOutcomeIdHex = "0" + secondOutcomeIdHex;
+      }
+
       await testTokenInstance.transfer(accounts[3], web3.toWei(113, 'ether'))
 
-      await testTokenInstance.approveAndCall(marketInstance.address, firstAmount, predictionId, {
+      await testTokenInstance.approveAndCall(marketInstance.address, firstAmount, predictionId + firstOutcomeIdHex, {
         from: accounts[3]
       })
 
-      await testTokenInstance.approveAndCall(marketInstance.address, secondAmount, predictionId)
-
-      await marketInstance.addForecast(predictionId, firstAmount, firstOutcomeId, { from: accounts[3] })
-      await marketInstance.addForecast(predictionId, secondAmount, secondOutcomeId)
+      await testTokenInstance.approveAndCall(marketInstance.address, secondAmount, predictionId + secondOutcomeIdHex)
 
       await marketInstance.cancel(predictionId)
       await marketInstance.refund(predictionId, firstOutcomeId, 0, 0)
