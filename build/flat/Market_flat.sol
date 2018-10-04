@@ -21,15 +21,6 @@ interface IResultStorage {
     function getResult(bytes32 _predictionId) external returns (uint8);
 }
 
-library BytesHelper {
-
-    function bytesToBytes32(bytes memory source) internal pure returns (bytes32 result) {
-        assembly {
-            result := mload(add(source, 32))
-        }
-    }
-}
-
 contract Owned {
     address public owner;
     address public executor;
@@ -70,15 +61,15 @@ contract Owned {
 }
 
 contract Market is Owned {
-    using SafeMath for uint;
-    using BytesHelper for bytes;
+    using SafeMath for uint;  
 
     event PredictionAdded(bytes32 id);
-    event ForecastAdded(bytes32 predictionId, uint8 outcomeId, address user); 
+    event ForecastAdded(bytes32 predictionId, bytes32 _forecastId); 
     event PredictionStatusChanged(bytes32 predictionId, PredictionStatus oldStatus, PredictionStatus newStatus);
-    event Refunded(address indexed owner, bytes32 predictionId, uint8 outcomeId, uint i, uint refundAmount);
+    event Refunded(bytes32 predictionId, bytes32 _forecastId);
     event PredictionResolved(bytes32 predictionId, uint8 winningOutcomeId);
-    event PaidOut(bytes32 _predictionId, uint8 winningOutcomeId, uint index, address user, uint winAmount);
+    event PaidOut(bytes32 _predictionId, bytes32 _forecastId);
+    //event Debug(uint index);
 
     enum PredictionStatus {
         NotSet,    // 0
@@ -93,30 +84,27 @@ contract Market is Owned {
         uint fee; // in WEIS       
         PredictionStatus status;    
         uint8 outcomesCount;
-        mapping(uint8 => OutcomesForecasts) outcomes; 
+        uint8 resultOutcome;
+        mapping(bytes32 => Forecast) forecasts;
+        mapping(uint8 => uint) outcomeTokens;
+        uint initialTokens;  
         uint totalTokens;          
-        uint totalForecasts; 
-        uint totalTokensNeedForPayout;  
+        uint totalForecasts;   
         uint totalTokensPaidout;     
         address resultStorage;   
         address prizeCalculator;
     }
 
-    struct OutcomesForecasts {    
-        Forecast[] forecasts;
-        uint totalTokens;
-    }
-
     struct Forecast {    
         address user;
         uint amount;
+        uint8 outcomeId;
         uint paidOut;
     }
 
     struct ForecastIndex {    
         bytes32 predictionId;
-        uint8 outcomeId;
-        uint positionIndex;
+        bytes32 forecastId;
     }
 
     uint8 public constant version = 1;
@@ -162,7 +150,7 @@ contract Market is Owned {
         uint _forecastEndUtc,
         uint _fee,
         uint8 _outcomesCount,  
-        uint _totalTokens,   
+        uint _initialTokens,   
         address _resultStorage, 
         address _prizeCalculator) public onlyAllowed notPaused {
 
@@ -170,7 +158,8 @@ contract Market is Owned {
         predictions[_id].fee = _fee;
         predictions[_id].status = PredictionStatus.Published;  
         predictions[_id].outcomesCount = _outcomesCount;
-        predictions[_id].totalTokens = _totalTokens;
+        predictions[_id].initialTokens = _initialTokens;
+        predictions[_id].totalTokens = _initialTokens;
         predictions[_id].resultStorage = _resultStorage;
         predictions[_id].prizeCalculator = _prizeCalculator;
 
@@ -190,7 +179,6 @@ contract Market is Owned {
     function cancel(bytes32 _predictionId) public onlyAllowed {    
         emit PredictionStatusChanged(_predictionId, predictions[_predictionId].status, PredictionStatus.Canceled);
         predictions[_predictionId].status = PredictionStatus.Canceled;    
-        predictions[_predictionId].totalTokensNeedForPayout = predictions[_predictionId].totalTokens;
     }
 
     function resolve(bytes32 _predictionId) public onlyAllowed {
@@ -205,89 +193,72 @@ contract Market is Owned {
         require(winningOutcomeId <= predictions[_predictionId].outcomesCount && winningOutcomeId > 0, "OutcomeId is not valid");
 
         emit PredictionStatusChanged(_predictionId, predictions[_predictionId].status, PredictionStatus.Resolved);
-        predictions[_predictionId].status = PredictionStatus.Resolved;    
-        predictions[_predictionId].totalTokensNeedForPayout = predictions[_predictionId].totalTokens;
-        
+        predictions[_predictionId].resultOutcome = winningOutcomeId;
+        predictions[_predictionId].status = PredictionStatus.Resolved; 
         emit PredictionResolved(_predictionId, winningOutcomeId);
     }
 
-    function payout(bytes32 _predictionId, uint _indexFrom, uint _indexTo) public {
+    function payout(bytes32 _predictionId, bytes32 _forecastId) public {
         require(predictions[_predictionId].status == PredictionStatus.Resolved, "Prediction should be resolved");
-
-        uint8 winningOutcomeId = IResultStorage(predictions[_predictionId].resultStorage).getResult(_predictionId);
-
-        require(_indexFrom <= _indexTo && _indexTo < predictions[_predictionId].outcomes[winningOutcomeId].forecasts.length, "Index is not valid");
+        require(predictions[_predictionId].resultOutcome != 0, "Outcome should be set");
 
         IPrizeCalculator calculator = IPrizeCalculator(predictions[_predictionId].prizeCalculator);
         
-        for (uint i = _indexFrom; i <= _indexTo; i++) {
-            Forecast storage forecast = predictions[_predictionId].outcomes[winningOutcomeId].forecasts[i];
+        Forecast storage forecast = predictions[_predictionId].forecasts[_forecastId];
 
-            if (forecast.paidOut == 0) {
-                uint winAmount = calculator.calculatePrizeAmount(
-                    predictions[_predictionId].totalTokens,
-                    predictions[_predictionId].outcomes[winningOutcomeId].totalTokens,
-                    forecast.amount
-                );
-                assert(winAmount > 0);
-                assert(IERC20(token).transfer(forecast.user, winAmount));
-                forecast.paidOut = winAmount;
-                predictions[_predictionId].totalTokensPaidout = predictions[_predictionId].totalTokensPaidout.add(winAmount);
-                emit PaidOut(_predictionId, winningOutcomeId, i, forecast.user, winAmount);
-            }
-        }          
+        if (forecast.paidOut == 0) {
+            uint winAmount = calculator.calculatePrizeAmount(
+                predictions[_predictionId].totalTokens,
+                predictions[_predictionId].outcomeTokens[predictions[_predictionId].resultOutcome],
+                forecast.amount
+            );
+            assert(winAmount > 0);
+            assert(IERC20(token).transfer(forecast.user, winAmount));
+            forecast.paidOut = winAmount;
+            predictions[_predictionId].totalTokensPaidout = predictions[_predictionId].totalTokensPaidout.add(winAmount);
+            emit PaidOut(_predictionId, _forecastId);
+        }     
     }
 
     // Owner can refund users forecasts
-    function refundUser(bytes32 _predictionId, uint8 _outcomeId, uint _indexFrom, uint _indexTo) public onlyAllowed {
+    function refundUser(bytes32 _predictionId, bytes32 _forecastId) public onlyAllowed {
         require (predictions[_predictionId].status != PredictionStatus.Resolved);
         
-        performRefund(_predictionId, _outcomeId, _indexFrom, _indexTo);
+        performRefund(_predictionId, _forecastId);
     }
    
     // User can refund when status is CANCELED
-    function refund(bytes32 _predictionId, uint8 _outcomeId, uint _indexFrom, uint _indexTo) public statusIsCanceled(_predictionId) {
-        performRefund(_predictionId, _outcomeId, _indexFrom, _indexTo);
+    function refund(bytes32 _predictionId, bytes32 _forecastId) public statusIsCanceled(_predictionId) {
+        performRefund(_predictionId, _forecastId);
     }
 
-    function performRefund(bytes32 _predictionId, uint8 _outcomeId, uint _indexFrom, uint _indexTo) private {
-        require(_indexFrom <= _indexTo && _indexTo < predictions[_predictionId].outcomes[_outcomeId].forecasts.length, "Index is not valid");
+    function performRefund(bytes32 _predictionId, bytes32 _forecastId) private {
+        require(predictions[_predictionId].forecasts[_forecastId].paidOut == 0, "Already paid");  
 
-        for (uint i = _indexFrom; i <= _indexTo; i++) {
-            require(predictions[_predictionId].outcomes[_outcomeId].forecasts[i].paidOut == 0, "Already paid");  
-
-            uint refundAmount = predictions[_predictionId].outcomes[_outcomeId].forecasts[i].amount;
-            
-            predictions[_predictionId].totalTokensPaidout = predictions[_predictionId].totalTokensPaidout.add(refundAmount);
-            predictions[_predictionId].outcomes[_outcomeId].totalTokens = predictions[_predictionId].outcomes[_outcomeId].totalTokens.sub(refundAmount);
-            predictions[_predictionId].outcomes[_outcomeId].forecasts[i].paidOut = refundAmount;
-                                                        
-            assert(IERC20(token).transfer(predictions[_predictionId].outcomes[_outcomeId].forecasts[i].user, refundAmount)); 
-            emit Refunded(predictions[_predictionId].outcomes[_outcomeId].forecasts[i].user, _predictionId, _outcomeId, i, refundAmount);
-        }
+        uint refundAmount = predictions[_predictionId].forecasts[_forecastId].amount;
+        predictions[_predictionId].totalTokensPaidout = predictions[_predictionId].totalTokensPaidout.add(refundAmount);        
+        predictions[_predictionId].forecasts[_forecastId].paidOut = refundAmount;
+                                                    
+        assert(IERC20(token).transfer(predictions[_predictionId].forecasts[_forecastId].user, refundAmount)); 
+        emit Refunded(_predictionId, _forecastId);
     }
-
-    bytes public predictionId; // storage for 32 symbols prediction id extracted from data
 
     /// Called by token contract after Approval: this.TokenInstance.methods.approveAndCall()
+    // _data = predictionId(32),forecastId(32),outcomeId(1)
     function receiveApproval(address _from, uint _amountOfTokens, address _token, bytes _data) 
             external 
             senderIsToken
-            notPaused {
+            notPaused {    
         require(_amountOfTokens > 0, "amount should be > 0");
         require(_from != address(0), "not valid from");
-        require(_data.length == 33, "not valid _data length");
-
-        bytes1 outcomeIdString = _data[32];
+        require(_data.length == 65, "not valid _data length");
+        bytes1 outcomeIdString = _data[64];
         uint8 outcomeId = uint8(outcomeIdString);
 
-        predictionId = _data;
-        predictionId.length = 32;
-        bytes32 predictionIdString = predictionId.bytesToBytes32();
-        predictionId = ""; // reset storage
+        bytes32 predictionIdString = bytesToFixedBytes32(_data,0);
+        bytes32 forecastIdString = bytesToFixedBytes32(_data,32);
 
         validatePrediction(predictionIdString, _amountOfTokens, outcomeId); 
-
         // Transfer tokens from sender to this contract
         require(IERC20(_token).transferFrom(_from, address(this), _amountOfTokens), "Tokens transfer failed.");
 
@@ -296,21 +267,22 @@ contract Market is Owned {
 
         predictions[predictionIdString].totalTokens = predictions[predictionIdString].totalTokens.add(amount);
         predictions[predictionIdString].totalForecasts++;
-        predictions[predictionIdString].outcomes[outcomeId].totalTokens = predictions[predictionIdString].outcomes[outcomeId].totalTokens.add(amount);
-        predictions[predictionIdString].outcomes[outcomeId].forecasts.push(Forecast(_from, amount, 0));
+        predictions[predictionIdString].outcomeTokens[outcomeId] = predictions[predictionIdString].outcomeTokens[outcomeId].add(amount);
+        predictions[predictionIdString].forecasts[forecastIdString] = Forecast(_from, amount, outcomeId, 0);
        
-        walletPredictions[_from].push(ForecastIndex(predictionIdString, outcomeId, predictions[predictionIdString].outcomes[outcomeId].forecasts.length - 1));
+        walletPredictions[_from].push(ForecastIndex(predictionIdString, forecastIdString));
 
-        emit ForecastAdded(predictionIdString, outcomeId, _from);
+        emit ForecastAdded(predictionIdString, forecastIdString);
     }
 
     //////////
     // View
     //////////
-    function getForecast(bytes32 _predictionId, uint8 _outcomeId, uint _index) public view returns(address, uint, uint) {
-        return (predictions[_predictionId].outcomes[_outcomeId].forecasts[_index].user,
-            predictions[_predictionId].outcomes[_outcomeId].forecasts[_index].amount,
-            predictions[_predictionId].outcomes[_outcomeId].forecasts[_index].paidOut);
+    function getForecast(bytes32 _predictionId, bytes32 _forecastId) public view returns(address, uint, uint8, uint) {
+        return (predictions[_predictionId].forecasts[_forecastId].user,
+            predictions[_predictionId].forecasts[_forecastId].amount,
+            predictions[_predictionId].forecasts[_forecastId].outcomeId,
+            predictions[_predictionId].forecasts[_forecastId].paidOut);
     }
 
     //////////
@@ -330,6 +302,15 @@ contract Market is Owned {
 
     function pause(bool _paused) external onlyOwner {
         paused = _paused;
+    }
+
+    function bytesToFixedBytes32(bytes memory b, uint offset) internal pure returns (bytes32) {
+        bytes32 out;
+
+        for (uint i = 0; i < 32; i++) {
+            out |= bytes32(b[offset + i] & 0xFF) >> (i * 8);
+        }
+        return out;
     }
 }
 
