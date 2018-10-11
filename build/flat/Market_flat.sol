@@ -25,10 +25,12 @@ contract Owned {
     address public owner;
     address public executor;
     address public newOwner;
+    address public superOwner;
   
     event OwnershipTransferred(address indexed _from, address indexed _to);
 
     constructor() public {
+        superOwner = msg.sender;
         owner = msg.sender;
         executor = msg.sender;
     }
@@ -38,25 +40,32 @@ contract Owned {
         _;
     }
 
-    modifier onlyAllowed {
-        require(msg.sender == owner || msg.sender == executor, "Not allowed");
+    modifier onlySuperOwner {
+        require(msg.sender == superOwner, "User is not owner");
         _;
     }
 
-    function transferOwnership(address _newOwner) public onlyOwner {
+    modifier onlyOwnerOrSuperOwner {
+        require(msg.sender == owner || msg.sender == superOwner, "User is not owner");
+        _;
+    }
+
+    modifier onlyAllowed {
+        require(msg.sender == owner || msg.sender == executor || msg.sender == superOwner, "Not allowed");
+        _;
+    }
+
+    function transferOwnership(address _newOwner) public onlyOwnerOrSuperOwner {
         newOwner = _newOwner;
     }
 
-    function transferExecutorOwnership(address _newExecutor) public onlyOwner {
-        emit OwnershipTransferred(executor, _newExecutor);
-        executor = _newExecutor;
+    function transferSuperOwnership(address _newOwner) public onlySuperOwner {
+        superOwner = _newOwner;
     }
 
-    function acceptOwnership() public {
-        require(msg.sender == newOwner);
-        emit OwnershipTransferred(owner, newOwner);
-        owner = newOwner;
-        newOwner = address(0);
+    function transferExecutorOwnership(address _newExecutor) public onlyOwnerOrSuperOwner {
+        emit OwnershipTransferred(executor, _newExecutor);
+        executor = _newExecutor;
     }
 }
 
@@ -139,7 +148,7 @@ contract Market is Owned {
         _;
     }
     
-    function initialize(address _token) external onlyOwner {
+    function initialize(address _token) external onlyOwnerOrSuperOwner {
         token = _token;
         paused = false;
     }

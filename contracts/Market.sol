@@ -85,7 +85,7 @@ contract Market is Owned {
         _;
     }
     
-    function initialize(address _token) external onlyOwner {
+    function initialize(address _token) external onlyOwnerOrSuperOwner {
         token = _token;
         paused = false;
     }
@@ -238,15 +238,15 @@ contract Market is Owned {
         require(false);
     }
 
-    function withdrawETH() external onlyOwner {
+    function withdrawETH() external onlyOwnerOrSuperOwner {
         owner.transfer(address(this).balance);
     }
 
-    function withdrawTokens(uint _amount, address _token) external onlyOwner {
+    function withdrawTokens(uint _amount, address _token) external onlyOwnerOrSuperOwner {
         IERC20(_token).transfer(owner, _amount);
     }
 
-    function pause(bool _paused) external onlyOwner {
+    function pause(bool _paused) external onlyOwnerOrSuperOwner {
         paused = _paused;
     }
 
