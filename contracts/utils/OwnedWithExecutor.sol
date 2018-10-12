@@ -3,7 +3,6 @@ pragma solidity ^0.4.23;
 contract Owned {
     address public owner;
     address public executor;
-    address public newOwner;
     address public superOwner;
   
     event OwnershipTransferred(address indexed _from, address indexed _to);
@@ -35,7 +34,7 @@ contract Owned {
     }
 
     function transferOwnership(address _newOwner) public onlyOwnerOrSuperOwner {
-        newOwner = _newOwner;
+        owner = _newOwner;
     }
 
     function transferSuperOwnership(address _newOwner) public onlySuperOwner {

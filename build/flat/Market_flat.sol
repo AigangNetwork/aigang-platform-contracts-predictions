@@ -24,7 +24,6 @@ interface IResultStorage {
 contract Owned {
     address public owner;
     address public executor;
-    address public newOwner;
     address public superOwner;
   
     event OwnershipTransferred(address indexed _from, address indexed _to);
@@ -56,7 +55,7 @@ contract Owned {
     }
 
     function transferOwnership(address _newOwner) public onlyOwnerOrSuperOwner {
-        newOwner = _newOwner;
+        owner = _newOwner;
     }
 
     function transferSuperOwnership(address _newOwner) public onlySuperOwner {
@@ -301,15 +300,15 @@ contract Market is Owned {
         require(false);
     }
 
-    function withdrawETH() external onlyOwner {
+    function withdrawETH() external onlyOwnerOrSuperOwner {
         owner.transfer(address(this).balance);
     }
 
-    function withdrawTokens(uint _amount, address _token) external onlyOwner {
+    function withdrawTokens(uint _amount, address _token) external onlyOwnerOrSuperOwner {
         IERC20(_token).transfer(owner, _amount);
     }
 
-    function pause(bool _paused) external onlyOwner {
+    function pause(bool _paused) external onlyOwnerOrSuperOwner {
         paused = _paused;
     }
 
