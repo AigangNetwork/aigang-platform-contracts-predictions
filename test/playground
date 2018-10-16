@@ -1,0 +1,31 @@
+pragma solidity ^0.4.24;
+
+contract test {
+    
+     bytes public x; // the data location of x is storage
+     bytes1 public index;
+    
+    function testas (bytes memory _extraData) public returns (bytes)  {
+        index = _extraData[2];
+        x = _extraData;
+        x.length = 2;
+        return x;
+    }
+    
+    function getIndex () public view returns (uint8)  {
+        
+        return uint8(index);
+    }
+    
+    
+    function toBytes(uint8 _x) returns (bytes b) {
+        b = new bytes(32);
+        assembly { mstore(add(b, 32), _x) }
+    }
+    
+    function toUint(bytes1 _x) returns (uint8) {
+        return uint8(_x);
+    }
+    
+    
+}
