@@ -89,6 +89,7 @@ contract Market is Owned {
     
     struct Prediction {
         uint forecastEndUtc;
+        uint forecastStartUtc;
         uint fee; // in WEIS       
         PredictionStatus status;    
         uint8 outcomesCount;
@@ -138,6 +139,7 @@ contract Market is Owned {
     function validatePrediction(bytes32 _id, uint _amount, uint8 _outcomeId) private view {
         require(predictions[_id].status == PredictionStatus.Published, "Prediction is not published");
         require(predictions[_id].forecastEndUtc > now, "Forecasts are over");
+        require(predictions[_id].forecastStartUtc < now, "Forecasting has not started yet");
         require(predictions[_id].outcomesCount >= _outcomeId && _outcomeId > 0, "Outcome id is not in range");
         require(predictions[_id].fee < _amount, "Amount should be bigger then fee");
     }
@@ -151,11 +153,11 @@ contract Market is Owned {
         token = _token;
         paused = false;
     }
-
-    // TODO: for testing 1,1929412716 ,3,1,6,0,"0xca35b7d915458ef540ade6068dfe2f44e8fa733c" 
+ 
     function addPrediction(
         bytes32 _id,
         uint _forecastEndUtc,
+        uint _forecastStartUtc,
         uint _fee,
         uint8 _outcomesCount,  
         uint _initialTokens,   
@@ -163,6 +165,7 @@ contract Market is Owned {
         address _prizeCalculator) public onlyAllowed notPaused {
 
         predictions[_id].forecastEndUtc = _forecastEndUtc;
+        predictions[_id].forecastStartUtc = _forecastStartUtc;
         predictions[_id].fee = _fee;
         predictions[_id].status = PredictionStatus.Published;  
         predictions[_id].outcomesCount = _outcomesCount;
@@ -184,7 +187,7 @@ contract Market is Owned {
         predictions[_predictionId].status = _status;            
     }
 
-    function cancel(bytes32 _predictionId) public onlyAllowed {    
+    function cancel(bytes32 _predictionId) public onlyOwnerOrSuperOwner {    
         emit PredictionStatusChanged(_predictionId, predictions[_predictionId].status, PredictionStatus.Canceled);
         predictions[_predictionId].status = PredictionStatus.Canceled;    
     }
@@ -206,37 +209,38 @@ contract Market is Owned {
         emit PredictionResolved(_predictionId, winningOutcomeId);
     }
 
-    function payout(bytes32 _predictionId, bytes32 _forecastId) public {
+    function payout(bytes32 _predictionId, bytes32 _forecastId) public notPaused {
         require(predictions[_predictionId].status == PredictionStatus.Resolved, "Prediction should be resolved");
         require(predictions[_predictionId].resultOutcome != 0, "Outcome should be set");
 
-        IPrizeCalculator calculator = IPrizeCalculator(predictions[_predictionId].prizeCalculator);
-        
         Forecast storage forecast = predictions[_predictionId].forecasts[_forecastId];
-
-        if (forecast.paidOut == 0) {
-            uint winAmount = calculator.calculatePrizeAmount(
-                predictions[_predictionId].totalTokens,
-                predictions[_predictionId].outcomeTokens[predictions[_predictionId].resultOutcome],
-                forecast.amount
-            );
-            assert(winAmount > 0);
-            assert(IERC20(token).transfer(forecast.user, winAmount));
-            forecast.paidOut = winAmount;
-            predictions[_predictionId].totalTokensPaidout = predictions[_predictionId].totalTokensPaidout.add(winAmount);
-            emit PaidOut(_predictionId, _forecastId);
-        }     
+        assert(predictions[_predictionId].resultOutcome == forecast.outcomeId);
+        assert(forecast.paidOut == 0);
+        
+        IPrizeCalculator calculator = IPrizeCalculator(predictions[_predictionId].prizeCalculator);
+    
+        uint winAmount = calculator.calculatePrizeAmount(
+            predictions[_predictionId].totalTokens,
+            predictions[_predictionId].outcomeTokens[predictions[_predictionId].resultOutcome],
+            forecast.amount
+        );
+        assert(winAmount > 0);
+        assert(IERC20(token).transfer(forecast.user, winAmount));
+        forecast.paidOut = winAmount;
+        predictions[_predictionId].totalTokensPaidout = predictions[_predictionId].totalTokensPaidout.add(winAmount);
+        emit PaidOut(_predictionId, _forecastId);
+             
     }
 
     // Owner can refund users forecasts
-    function refundUser(bytes32 _predictionId, bytes32 _forecastId) public onlyAllowed {
+    function refundUser(bytes32 _predictionId, bytes32 _forecastId) public onlyOwnerOrSuperOwner {
         require (predictions[_predictionId].status != PredictionStatus.Resolved);
         
         performRefund(_predictionId, _forecastId);
     }
    
     // User can refund when status is CANCELED
-    function refund(bytes32 _predictionId, bytes32 _forecastId) public statusIsCanceled(_predictionId) {
+    function refund(bytes32 _predictionId, bytes32 _forecastId) public notPaused statusIsCanceled(_predictionId) {
         performRefund(_predictionId, _forecastId);
     }
 
@@ -267,6 +271,7 @@ contract Market is Owned {
         bytes32 forecastIdString = bytesToFixedBytes32(_data,32);
 
         validatePrediction(predictionIdString, _amountOfTokens, outcomeId); 
+        require(predictions[predictionIdString].forecasts[forecastIdString].amount == 0);
         // Transfer tokens from sender to this contract
         require(IERC20(_token).transferFrom(_from, address(this), _amountOfTokens), "Tokens transfer failed.");
 
@@ -284,13 +289,17 @@ contract Market is Owned {
     }
 
     //////////
-    // View
+    // Views
     //////////
     function getForecast(bytes32 _predictionId, bytes32 _forecastId) public view returns(address, uint, uint8, uint) {
         return (predictions[_predictionId].forecasts[_forecastId].user,
             predictions[_predictionId].forecasts[_forecastId].amount,
             predictions[_predictionId].forecasts[_forecastId].outcomeId,
             predictions[_predictionId].forecasts[_forecastId].paidOut);
+    }
+
+    function getOutcomeTokens(bytes32 _predictionId, uint8 _outcomeId) public view returns(uint) {
+        return (predictions[_predictionId].outcomeTokens[_outcomeId]);
     }
 
     //////////

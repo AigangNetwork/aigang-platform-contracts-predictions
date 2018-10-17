@@ -24,6 +24,7 @@ contract('Market', accounts => {
 
       id = web3.toAscii('18fda5cf3a7a4bc999e3400f49401266')
       const endTime = Date.now() + 60
+      const startTime = new Date().getTime() / 1000 - 2
       const feeInWeis = web3.toWei(12, 'ether')
       const outcomesCount = 2
       const totalTokens = 1000
@@ -31,6 +32,7 @@ contract('Market', accounts => {
       await marketInstance.addPrediction(
         id,
         endTime,
+        startTime,
         feeInWeis,
         outcomesCount,
         totalTokens,
@@ -41,7 +43,7 @@ contract('Market', accounts => {
 
     it('add prediction', async () => {
       const prediction = await marketInstance.predictions.call(id)
-      const predictionStatus = prediction[2].toNumber()
+      const predictionStatus = prediction[3].toNumber()
 
       assert.equal(1, predictionStatus)
     })
@@ -50,7 +52,7 @@ contract('Market', accounts => {
       await marketInstance.changePredictionStatus(id, 3)
 
       const prediction = await marketInstance.predictions.call(id)
-      const predictionStatus = prediction[2].toNumber()
+      const predictionStatus = prediction[3].toNumber()
 
       assert.equal(3, predictionStatus)
     })
@@ -59,7 +61,7 @@ contract('Market', accounts => {
       await marketInstance.cancel(id)
 
       const prediction = await marketInstance.predictions.call(id)
-      const predictionStatus = prediction[2].toNumber()
+      const predictionStatus = prediction[3].toNumber()
 
       assert.equal(4, predictionStatus)
     })
@@ -67,6 +69,7 @@ contract('Market', accounts => {
     it('resolve prediction', async () => {
       const id = 1342
       const endTime = new Date().getTime() / 1000 - 1000
+      const startTime = Date.now() - 1
       const feeInWeis = web3.toWei(12, 'ether')
       const outcomesCount = 2
       const totalTokens = 1000
@@ -74,6 +77,7 @@ contract('Market', accounts => {
       await marketInstance.addPrediction(
         id,
         endTime,
+        startTime,
         feeInWeis,
         outcomesCount,
         totalTokens,
@@ -86,7 +90,7 @@ contract('Market', accounts => {
       await marketInstance.resolve(id)
 
       const prediction = await marketInstance.predictions.call(id)
-      const predictionStatus = prediction[2].toNumber()
+      const predictionStatus = prediction[3].toNumber()
 
       assert.equal(2, predictionStatus)
     })
@@ -95,6 +99,7 @@ contract('Market', accounts => {
       // Creating prediction
       const id = web3.fromAscii('18fda5cf3a7a4999e3400f4940126432') // result is hex 
       const endTime = new Date().getTime() / 1000 + 2
+      const startTime = new Date().getTime() / 1000 - 2
       const feeInWeis = web3.toWei(12, 'ether')
       const outcomesCount = 2
       const totalTokens = web3.toWei(0, 'ether')
@@ -102,6 +107,7 @@ contract('Market', accounts => {
       await marketInstance.addPrediction(
         id,
         endTime,
+        startTime,
         feeInWeis,
         outcomesCount,
         totalTokens,
@@ -167,6 +173,7 @@ contract('Market', accounts => {
       await marketInstance.initialize(testTokenInstance.address)
       predictionId = web3.fromAscii('18fda5cf3a7a4999e3400f4940126432') // result is hex 
       const endTime = Date.now() + 60
+      const startTime = new Date().getTime() / 1000 - 2
       feeInWeis = web3.toWei(12, 'ether')
       const outcomesCount = 4
       const totalTokens = web3.toWei(1000, 'ether')
@@ -174,6 +181,7 @@ contract('Market', accounts => {
       await marketInstance.addPrediction(
         predictionId,
         endTime,
+        startTime,
         feeInWeis,
         outcomesCount,
         totalTokens,

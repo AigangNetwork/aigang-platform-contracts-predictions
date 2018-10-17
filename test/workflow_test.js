@@ -23,12 +23,14 @@ contract('Market', accounts => {
 
       await marketInstance.initialize(testTokenInstance.address)  
       const endTime = Date.now() + 60
+      const startTime = Math.floor(new Date().getTime() / 1000 - 2)
       const outcomesCount = 3
       const totalTokens = web3.toWei(10, 'ether')
 
       await marketInstance.addPrediction(
         predictionId,
         endTime,
+        startTime,
         feeInWeis,
         outcomesCount,
         totalTokens,
@@ -41,14 +43,15 @@ contract('Market', accounts => {
       const prediction = await marketInstance.predictions.call(predictionId)
       // console.log(prediction)
       assert.equal(endTime, prediction[0].toNumber())
-      assert.equal(feeInWeis, prediction[1].toNumber())
-      assert.equal(1, prediction[2].toNumber()) // published
-      assert.equal(outcomesCount, prediction[3].toNumber())  
-      assert.equal(totalTokens, prediction[5].toNumber())  //initialTokens
-      assert.equal(totalTokens, prediction[6].toNumber())  //totalTokens
+      assert.equal(startTime, prediction[1].toNumber())
+      assert.equal(feeInWeis, prediction[2].toNumber())
+      assert.equal(1, prediction[3].toNumber()) // published
+      assert.equal(outcomesCount, prediction[4].toNumber())  
+      assert.equal(totalTokens, prediction[6].toNumber())  //initialTokens
+      assert.equal(totalTokens, prediction[7].toNumber())  //totalTokens
      // console.log(`total tokens: ${totalTokens} initial tokens : ${prediction[5].toNumber()}`)
-      assert.equal(resultStorageInstance.address, prediction[9])
-      assert.equal(prizeCalculatorInstance.address, prediction[10])
+      assert.equal(resultStorageInstance.address, prediction[10])
+      assert.equal(prizeCalculatorInstance.address, prediction[11])
     })
 
     it('1 success workflow', async () => {
@@ -134,12 +137,12 @@ contract('Market', accounts => {
       // ASSERT PREDICTION
       const prediction = await marketInstance.predictions.call(predictionId)
       //console.log(prediction)
-      assert.equal(2, prediction[2].toNumber()) // Resolved
-      assert.equal(1, prediction[4].toNumber()) // ResultOutcome = 1
+      assert.equal(2, prediction[3].toNumber()) // Resolved
+      assert.equal(1, prediction[5].toNumber()) // ResultOutcome = 1
       assert.equal(web3.toWei(5, 'ether'), await marketInstance.totalFeeCollected()) // 5 forecast with 1 aix
-      assert.equal(web3.toWei(111, 'ether'), prediction[6].toNumber())// totalTokens 116 - 5 = 111
-      assert.equal(5, prediction[7].toNumber()) // totalForecasts
-      assert.equal(web3.toWei(111, 'ether'), prediction[8].toNumber())// totalTokensPaidout 
+      assert.equal(web3.toWei(111, 'ether'), prediction[7].toNumber())// totalTokens 116 - 5 = 111
+      assert.equal(5, prediction[8].toNumber()) // totalForecasts
+      assert.equal(web3.toWei(111, 'ether'), prediction[9].toNumber())// totalTokensPaidout 
       assert.equal(web3.toWei(5, 'ether'), await testTokenInstance.balanceOf(marketInstance.address)) // total prediction left over
 
       // ASSERT OUTCOMES

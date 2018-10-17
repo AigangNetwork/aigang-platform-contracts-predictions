@@ -27,6 +27,7 @@ contract Market is Owned {
     
     struct Prediction {
         uint forecastEndUtc;
+        uint forecastStartUtc;
         uint fee; // in WEIS       
         PredictionStatus status;    
         uint8 outcomesCount;
@@ -76,6 +77,7 @@ contract Market is Owned {
     function validatePrediction(bytes32 _id, uint _amount, uint8 _outcomeId) private view {
         require(predictions[_id].status == PredictionStatus.Published, "Prediction is not published");
         require(predictions[_id].forecastEndUtc > now, "Forecasts are over");
+        require(predictions[_id].forecastStartUtc < now, "Forecasting has not started yet");
         require(predictions[_id].outcomesCount >= _outcomeId && _outcomeId > 0, "Outcome id is not in range");
         require(predictions[_id].fee < _amount, "Amount should be bigger then fee");
     }
@@ -93,6 +95,7 @@ contract Market is Owned {
     function addPrediction(
         bytes32 _id,
         uint _forecastEndUtc,
+        uint _forecastStartUtc,
         uint _fee,
         uint8 _outcomesCount,  
         uint _initialTokens,   
@@ -100,6 +103,7 @@ contract Market is Owned {
         address _prizeCalculator) public onlyAllowed notPaused {
 
         predictions[_id].forecastEndUtc = _forecastEndUtc;
+        predictions[_id].forecastStartUtc = _forecastStartUtc;
         predictions[_id].fee = _fee;
         predictions[_id].status = PredictionStatus.Published;  
         predictions[_id].outcomesCount = _outcomesCount;
@@ -205,7 +209,7 @@ contract Market is Owned {
         bytes32 forecastIdString = bytesToFixedBytes32(_data,32);
 
         validatePrediction(predictionIdString, _amountOfTokens, outcomeId); 
-        require(predictions[predictionIdString].forecasts[forecastIdString].amount == 0)
+        require(predictions[predictionIdString].forecasts[forecastIdString].amount == 0);
         // Transfer tokens from sender to this contract
         require(IERC20(_token).transferFrom(_from, address(this), _amountOfTokens), "Tokens transfer failed.");
 
