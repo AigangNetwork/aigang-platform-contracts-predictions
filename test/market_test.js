@@ -58,7 +58,7 @@ contract('Market', accounts => {
     })
 
     it('cancel prediction', async () => {
-      await marketInstance.cancel(id)
+      await marketInstance.changePredictionStatus(id,4) 
 
       const prediction = await marketInstance.predictions.call(id)
       const predictionStatus = prediction[3].toNumber()
@@ -254,7 +254,7 @@ contract('Market', accounts => {
 
       await testTokenInstance.approveAndCall(marketInstance.address, secondAmount, predictionId + secondIdHex.replace("0x", "") + secondOutcomeIdHex)
 
-      await marketInstance.cancel(predictionId)
+      await marketInstance.changePredictionStatus(predictionId,4) 
       await marketInstance.refund(predictionId, firstIdHex)
 
       const forecast = await marketInstance.getForecast(predictionId, firstIdHex)

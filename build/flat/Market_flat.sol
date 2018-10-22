@@ -126,7 +126,7 @@ contract Market is Owned {
   
     uint public totalFeeCollected;
 
-    modifier notPaused() {
+    modifier marketNotPaused() {
         require(paused == false, "Contract is paused");
         _;
     }
@@ -134,14 +134,6 @@ contract Market is Owned {
     modifier statusIsCanceled(bytes32 _predictionId) {
         require(predictions[_predictionId].status == PredictionStatus.Canceled, "Prediction is not canceled");
         _;
-    }
-
-    function validatePrediction(bytes32 _id, uint _amount, uint8 _outcomeId) private view {
-        require(predictions[_id].status == PredictionStatus.Published, "Prediction is not published");
-        require(predictions[_id].forecastEndUtc > now, "Forecasts are over");
-        require(predictions[_id].forecastStartUtc < now, "Forecasting has not started yet");
-        require(predictions[_id].outcomesCount >= _outcomeId && _outcomeId > 0, "Outcome id is not in range");
-        require(predictions[_id].fee < _amount, "Amount should be bigger then fee");
     }
 
     modifier senderIsToken() {
@@ -162,7 +154,7 @@ contract Market is Owned {
         uint8 _outcomesCount,  
         uint _initialTokens,   
         address _resultStorage, 
-        address _prizeCalculator) public onlyAllowed notPaused {
+        address _prizeCalculator) public onlyAllowed marketNotPaused {
 
         predictions[_id].forecastEndUtc = _forecastEndUtc;
         predictions[_id].forecastStartUtc = _forecastStartUtc;
@@ -181,15 +173,8 @@ contract Market is Owned {
             public 
             onlyAllowed {
         require(predictions[_predictionId].status != PredictionStatus.NotSet, "Prediction not exist");
-        require(_status != PredictionStatus.Resolved, "Use resolve function");
-        require(_status != PredictionStatus.Canceled, "Use cancel function");
         emit PredictionStatusChanged(_predictionId, predictions[_predictionId].status, _status);
         predictions[_predictionId].status = _status;            
-    }
-
-    function cancel(bytes32 _predictionId) public onlyOwnerOrSuperOwner {    
-        emit PredictionStatusChanged(_predictionId, predictions[_predictionId].status, PredictionStatus.Canceled);
-        predictions[_predictionId].status = PredictionStatus.Canceled;    
     }
 
     function resolve(bytes32 _predictionId) public onlyAllowed {
@@ -209,7 +194,7 @@ contract Market is Owned {
         emit PredictionResolved(_predictionId, winningOutcomeId);
     }
 
-    function payout(bytes32 _predictionId, bytes32 _forecastId) public notPaused {
+    function payout(bytes32 _predictionId, bytes32 _forecastId) public marketNotPaused {
         require(predictions[_predictionId].status == PredictionStatus.Resolved, "Prediction should be resolved");
         require(predictions[_predictionId].resultOutcome != 0, "Outcome should be set");
 
@@ -225,14 +210,13 @@ contract Market is Owned {
             forecast.amount
         );
         assert(winAmount > 0);
-        assert(IERC20(token).transfer(forecast.user, winAmount));
         forecast.paidOut = winAmount;
+        assert(IERC20(token).transfer(forecast.user, winAmount));
         predictions[_predictionId].totalTokensPaidout = predictions[_predictionId].totalTokensPaidout.add(winAmount);
         emit PaidOut(_predictionId, _forecastId);
-             
     }
 
-    // Owner can refund users forecasts
+    // Owner can refund any users forecasts
     function refundUser(bytes32 _predictionId, bytes32 _forecastId) public onlyOwnerOrSuperOwner {
         require (predictions[_predictionId].status != PredictionStatus.Resolved);
         
@@ -240,7 +224,7 @@ contract Market is Owned {
     }
    
     // User can refund when status is CANCELED
-    function refund(bytes32 _predictionId, bytes32 _forecastId) public notPaused statusIsCanceled(_predictionId) {
+    function refund(bytes32 _predictionId, bytes32 _forecastId) public marketNotPaused statusIsCanceled(_predictionId) {
         performRefund(_predictionId, _forecastId);
     }
 
@@ -260,7 +244,7 @@ contract Market is Owned {
     function receiveApproval(address _from, uint _amountOfTokens, address _token, bytes _data) 
             external 
             senderIsToken
-            notPaused {    
+            marketNotPaused {    
         require(_amountOfTokens > 0, "amount should be > 0");
         require(_from != address(0), "not valid from");
         require(_data.length == 65, "not valid _data length");
@@ -270,8 +254,14 @@ contract Market is Owned {
         bytes32 predictionIdString = bytesToFixedBytes32(_data,0);
         bytes32 forecastIdString = bytesToFixedBytes32(_data,32);
 
-        validatePrediction(predictionIdString, _amountOfTokens, outcomeId); 
+        // Validate prediction and forecast
+        require(predictions[predictionIdString].status == PredictionStatus.Published, "Prediction is not published");
+        require(predictions[predictionIdString].forecastEndUtc > now, "Forecasts are over");
+        require(predictions[predictionIdString].forecastStartUtc < now, "Forecasting has not started yet");
+        require(predictions[predictionIdString].outcomesCount >= outcomeId && outcomeId > 0, "Outcome id is not in range");
+        require(predictions[predictionIdString].fee < _amountOfTokens, "Amount should be bigger then fee");
         require(predictions[predictionIdString].forecasts[forecastIdString].amount == 0);
+
         // Transfer tokens from sender to this contract
         require(IERC20(_token).transferFrom(_from, address(this), _amountOfTokens), "Tokens transfer failed.");
 
