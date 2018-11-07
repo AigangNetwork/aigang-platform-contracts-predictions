@@ -11,15 +11,15 @@ contract PrizeCalculator is IPrizeCalculator {
         public
         pure
         returns (uint)
-        {
-            require (_predictionTotalTokens > 0, "Not valid prediction tokens");
-            require (_winOutputTotalTokens > 0, "Not valid output tokens");
-            require (_forecastTokens > 0, "Not valid forecast tokens");
-            
-            uint returnValue = 0;
-            
-            returnValue = _forecastTokens.mul(_predictionTotalTokens).div(_winOutputTotalTokens);
-           
-            return returnValue;
-        }
+    {
+        require (_predictionTotalTokens > 0, "Not valid prediction tokens");
+        require (_winOutputTotalTokens > 0, "Not valid output tokens");
+        require (_forecastTokens > 0, "Not valid forecast tokens");
+        
+        uint returnValue = 0;
+        
+        returnValue = _forecastTokens.mul(_predictionTotalTokens).div(_winOutputTotalTokens);
+        
+        return returnValue;
+    }
 }

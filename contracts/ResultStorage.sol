@@ -7,6 +7,7 @@ import "./interfaces/IResultStorage.sol";
 contract ResultStorage is Owned, IResultStorage {
 
     event ResultAssigned(bytes32 indexed _predictionId, uint8 _outcomeId);
+    event Withdraw(uint _amount);
 
     struct Result {     
         uint8 outcomeId;
@@ -54,11 +55,14 @@ contract ResultStorage is Owned, IResultStorage {
     }
 
     function withdrawETH() external onlyOwner {
-        owner.transfer(address(this).balance);
+        uint balance = address(this).balance;
+        owner.transfer(balance);
+        emit Withdraw(balance);
     }
 
     function withdrawTokens(uint _amount, address _token) external onlyOwner {
-        IERC20(_token).transfer(owner, _amount);
+        assert(IERC20(_token).transfer(owner, _amount));
+        emit Withdraw(_amount);
     }
 
     function pause(bool _paused) external onlyOwner {
