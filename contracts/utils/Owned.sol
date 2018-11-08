@@ -11,15 +11,16 @@ contract Owned {
     }
 
     modifier onlyOwner {
-        require(msg.sender == owner);
+        require(msg.sender == owner, "Only owner is allowed");
         _;
     }
 
     function transferOwnership(address _newOwner) public onlyOwner {
         newOwner = _newOwner;
     }
+    
     function acceptOwnership() public {
-        require(msg.sender == newOwner);
+        require(msg.sender == newOwner && msg.sender != address(0), "Only newOwner can accept");
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
         newOwner = address(0);
