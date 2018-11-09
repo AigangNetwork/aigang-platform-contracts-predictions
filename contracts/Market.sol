@@ -9,6 +9,7 @@ import "./interfaces/IPrizeCalculator.sol";
 contract Market is Owned {
     using SafeMath for uint;  
 
+    event Initialize(address _token); 
     event PredictionAdded(bytes32 id);
     event ForecastAdded(bytes32 predictionId, bytes32 _forecastId); 
     event PredictionStatusChanged(bytes32 predictionId, PredictionStatus oldStatus, PredictionStatus newStatus);
@@ -83,6 +84,7 @@ contract Market is Owned {
     function initialize(address _token) external onlyOwnerOrSuperOwner {
         token = _token;
         paused = false;
+        emit Initialize(_token);
     }
  
     function addPrediction(
@@ -231,9 +233,9 @@ contract Market is Owned {
         return (predictions[_predictionId].outcomeTokens[_outcomeId]);
     }
 
-    //////////
+    // ////////
     // Safety Methods
-    //////////
+    // ////////
     function () public payable {
         require(false);
     }
