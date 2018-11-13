@@ -1,13 +1,10 @@
-const TestToken = artifacts.require('./moc/TestToken.sol')
-const Market = artifacts.require('./Market.sol')
 const PrizeCalculator = artifacts.require('./PrizeCalculator.sol')
-const ResultStorage = artifacts.require('./ResultStorage.sol')
 
 const BigNumber = web3.BigNumber
-contract('Market', accounts => {
+contract('PrizeCalculator', accounts => {
   let prizeCalculatorInstance
 
-  describe('#prediction', async () => {
+  describe('#calculatePrizeAmount', async () => {
     let id
     beforeEach(async () => {
       prizeCalculatorInstance = await PrizeCalculator.new()
