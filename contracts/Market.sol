@@ -59,6 +59,7 @@ contract Market is Owned {
     uint8 public constant version = 1;
     address public token;
     bool public paused = true;
+    uint public totalPredictions;
 
     mapping(bytes32 => Prediction) public predictions;
 
@@ -95,7 +96,11 @@ contract Market is Owned {
         uint8 _outcomesCount,  
         uint _initialTokens,   
         address _resultStorage, 
-        address _prizeCalculator) external onlyAllowed marketNotPaused {
+        address _prizeCalculator) external onlyOwnerOrSuperOwner marketNotPaused {
+
+        if (predictions[_id].status == PredictionStatus.NotSet) { // do not increase if update
+            totalPredictions++;
+        } 
 
         predictions[_id].forecastEndUtc = _forecastEndUtc;
         predictions[_id].forecastStartUtc = _forecastStartUtc;

@@ -71,12 +71,14 @@ contract Owned {
 contract Market is Owned {
     using SafeMath for uint;  
 
+    event Initialize(address _token); 
     event PredictionAdded(bytes32 id);
     event ForecastAdded(bytes32 predictionId, bytes32 _forecastId); 
     event PredictionStatusChanged(bytes32 predictionId, PredictionStatus oldStatus, PredictionStatus newStatus);
     event Refunded(bytes32 predictionId, bytes32 _forecastId);
     event PredictionResolved(bytes32 predictionId, uint8 winningOutcomeId);
     event PaidOut(bytes32 _predictionId, bytes32 _forecastId);
+    event Withdraw(uint _amount);
     //event Debug(uint index);
 
     enum PredictionStatus {
@@ -119,6 +121,7 @@ contract Market is Owned {
     uint8 public constant version = 1;
     address public token;
     bool public paused = true;
+    uint public totalPredictions;
 
     mapping(bytes32 => Prediction) public predictions;
 
@@ -144,6 +147,7 @@ contract Market is Owned {
     function initialize(address _token) external onlyOwnerOrSuperOwner {
         token = _token;
         paused = false;
+        emit Initialize(_token);
     }
  
     function addPrediction(
@@ -154,7 +158,11 @@ contract Market is Owned {
         uint8 _outcomesCount,  
         uint _initialTokens,   
         address _resultStorage, 
-        address _prizeCalculator) public onlyAllowed marketNotPaused {
+        address _prizeCalculator) external onlyOwnerOrSuperOwner marketNotPaused {
+
+        if (predictions[_id].status == PredictionStatus.NotSet) { // do not increase if update
+            totalPredictions++;
+        } 
 
         predictions[_id].forecastEndUtc = _forecastEndUtc;
         predictions[_id].forecastStartUtc = _forecastStartUtc;
@@ -170,14 +178,14 @@ contract Market is Owned {
     }
 
     function changePredictionStatus(bytes32 _predictionId, PredictionStatus _status) 
-            public 
+            external 
             onlyAllowed {
         require(predictions[_predictionId].status != PredictionStatus.NotSet, "Prediction not exist");
         emit PredictionStatusChanged(_predictionId, predictions[_predictionId].status, _status);
         predictions[_predictionId].status = _status;            
     }
 
-    function resolve(bytes32 _predictionId) public onlyAllowed {
+    function resolve(bytes32 _predictionId) external onlyAllowed {
         require(predictions[_predictionId].status == PredictionStatus.Published, "Prediction must be Published"); 
 
         if (predictions[_predictionId].forecastEndUtc < now) // allow to close prediction earliar
@@ -185,7 +193,7 @@ contract Market is Owned {
             predictions[_predictionId].forecastEndUtc = now;
         }
 
-        uint8 winningOutcomeId = IResultStorage(predictions[_predictionId].resultStorage).getResult(_predictionId);
+        uint8 winningOutcomeId = IResultStorage(predictions[_predictionId].resultStorage).getResult(_predictionId); // SWC ID: 107 if will be public posible reentrancy attacks
         require(winningOutcomeId <= predictions[_predictionId].outcomesCount && winningOutcomeId > 0, "OutcomeId is not valid");
 
         emit PredictionStatusChanged(_predictionId, predictions[_predictionId].status, PredictionStatus.Resolved);
@@ -217,14 +225,14 @@ contract Market is Owned {
     }
 
     // Owner can refund any users forecasts
-    function refundUser(bytes32 _predictionId, bytes32 _forecastId) public onlyOwnerOrSuperOwner {
+    function refundUser(bytes32 _predictionId, bytes32 _forecastId) external onlyOwnerOrSuperOwner {
         require (predictions[_predictionId].status != PredictionStatus.Resolved);
         
         performRefund(_predictionId, _forecastId);
     }
    
     // User can refund when status is CANCELED
-    function refund(bytes32 _predictionId, bytes32 _forecastId) public marketNotPaused statusIsCanceled(_predictionId) {
+    function refund(bytes32 _predictionId, bytes32 _forecastId) external marketNotPaused statusIsCanceled(_predictionId) {
         performRefund(_predictionId, _forecastId);
     }
 
@@ -269,7 +277,7 @@ contract Market is Owned {
         totalFeeCollected = totalFeeCollected.add(predictions[predictionIdString].fee);
 
         predictions[predictionIdString].totalTokens = predictions[predictionIdString].totalTokens.add(amount);
-        predictions[predictionIdString].totalForecasts++;
+        predictions[predictionIdString].totalForecasts = predictions[predictionIdString].totalForecasts.add(1);
         predictions[predictionIdString].outcomeTokens[outcomeId] = predictions[predictionIdString].outcomeTokens[outcomeId].add(amount);
         predictions[predictionIdString].forecasts[forecastIdString] = Forecast(_from, amount, outcomeId, 0);
        
@@ -292,19 +300,22 @@ contract Market is Owned {
         return (predictions[_predictionId].outcomeTokens[_outcomeId]);
     }
 
-    //////////
+    // ////////
     // Safety Methods
-    //////////
+    // ////////
     function () public payable {
         require(false);
     }
 
     function withdrawETH() external onlyOwnerOrSuperOwner {
-        owner.transfer(address(this).balance);
+        uint balance = address(this).balance;
+        owner.transfer(balance);
+        emit Withdraw(balance);
     }
 
     function withdrawTokens(uint _amount, address _token) external onlyOwnerOrSuperOwner {
-        IERC20(_token).transfer(owner, _amount);
+        assert(IERC20(_token).transfer(owner, _amount));
+        emit Withdraw(_amount);
     }
 
     function pause(bool _paused) external onlyOwnerOrSuperOwner {
@@ -330,10 +341,18 @@ library SafeMath {
         require(b <= a);
         c = a - b;
     }
-    function mul(uint a, uint b) internal pure returns (uint c) {
-        c = a * b;
-        require(a == 0 || c / a == b);
+    function mul(uint a, uint b) internal pure returns (uint) {
+        if (a == 0) 
+        {
+            return 0;
+        }
+
+        uint c = a * b;
+        require(c / a == b);
+
+        return c;
     }
+
     function div(uint a, uint b) internal pure returns (uint c) {
         require(b > 0);
         c = a / b;

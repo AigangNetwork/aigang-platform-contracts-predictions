@@ -14,17 +14,17 @@ contract PrizeCalculator is IPrizeCalculator {
         public
         pure
         returns (uint)
-        {
-            require (_predictionTotalTokens > 0, "Not valid prediction tokens");
-            require (_winOutputTotalTokens > 0, "Not valid output tokens");
-            require (_forecastTokens > 0, "Not valid forecast tokens");
-            
-            uint returnValue = 0;
-            
-            returnValue = _forecastTokens.mul(_predictionTotalTokens).div(_winOutputTotalTokens);
-           
-            return returnValue;
-        }
+    {
+        require (_predictionTotalTokens > 0, "Not valid prediction tokens");
+        require (_winOutputTotalTokens > 0, "Not valid output tokens");
+        require (_forecastTokens > 0, "Not valid forecast tokens");
+        
+        uint returnValue = 0;
+        
+        returnValue = _forecastTokens.mul(_predictionTotalTokens).div(_winOutputTotalTokens);
+        
+        return returnValue;
+    }
 }
 
 library SafeMath {
@@ -36,10 +36,18 @@ library SafeMath {
         require(b <= a);
         c = a - b;
     }
-    function mul(uint a, uint b) internal pure returns (uint c) {
-        c = a * b;
-        require(a == 0 || c / a == b);
+    function mul(uint a, uint b) internal pure returns (uint) {
+        if (a == 0) 
+        {
+            return 0;
+        }
+
+        uint c = a * b;
+        require(c / a == b);
+
+        return c;
     }
+
     function div(uint a, uint b) internal pure returns (uint c) {
         require(b > 0);
         c = a / b;
