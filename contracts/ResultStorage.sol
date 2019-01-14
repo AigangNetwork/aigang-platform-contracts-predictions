@@ -1,6 +1,6 @@
 pragma solidity ^0.4.23;
 
-import "./utils/Owned.sol";
+import "./utils/OwnedWithExecutor.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IResultStorage.sol";
 
@@ -30,7 +30,7 @@ contract ResultStorage is Owned, IResultStorage {
  
     function setOutcome (bytes32 _predictionId, uint8 _outcomeId)
             public 
-            onlyOwner
+            onlyAllowed
             notPaused {        
         
         results[_predictionId].outcomeId = _outcomeId;
@@ -54,18 +54,18 @@ contract ResultStorage is Owned, IResultStorage {
         require(false);
     }
 
-    function withdrawETH() external onlyOwner {
+    function withdrawETH() external onlyOwnerOrSuperOwner {
         uint balance = address(this).balance;
         owner.transfer(balance);
         emit Withdraw(balance);
     }
 
-    function withdrawTokens(uint _amount, address _token) external onlyOwner {
+    function withdrawTokens(uint _amount, address _token) external onlyOwnerOrSuperOwner {
         assert(IERC20(_token).transfer(owner, _amount));
         emit Withdraw(_amount);
     }
 
-    function pause(bool _paused) external onlyOwner {
+    function pause(bool _paused) external onlyOwnerOrSuperOwner {
         paused = _paused;
     }
 }

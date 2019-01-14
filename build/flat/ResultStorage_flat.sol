@@ -1,4 +1,4 @@
-pragma solidity ^0.4.13;
+pragma solidity ^0.4.25;
 
 interface IERC20 {
   function transfer(address _to, uint256 _amount) external returns (bool success);
@@ -16,28 +16,48 @@ interface IResultStorage {
 
 contract Owned {
     address public owner;
-    address public newOwner;
-
+    address public executor;
+    address public superOwner;
+  
     event OwnershipTransferred(address indexed _from, address indexed _to);
 
     constructor() public {
+        superOwner = msg.sender;
         owner = msg.sender;
+        executor = msg.sender;
     }
 
     modifier onlyOwner {
-        require(msg.sender == owner, "Only owner is allowed");
+        require(msg.sender == owner, "User is not owner");
         _;
     }
 
-    function transferOwnership(address _newOwner) public onlyOwner {
-        newOwner = _newOwner;
+    modifier onlySuperOwner {
+        require(msg.sender == superOwner, "User is not owner");
+        _;
     }
-    
-    function acceptOwnership() public {
-        require(msg.sender == newOwner && msg.sender != address(0), "Only newOwner can accept");
-        emit OwnershipTransferred(owner, newOwner);
-        owner = newOwner;
-        newOwner = address(0);
+
+    modifier onlyOwnerOrSuperOwner {
+        require(msg.sender == owner || msg.sender == superOwner, "User is not owner");
+        _;
+    }
+
+    modifier onlyAllowed {
+        require(msg.sender == owner || msg.sender == executor || msg.sender == superOwner, "Not allowed");
+        _;
+    }
+
+    function transferOwnership(address _newOwner) public onlyOwnerOrSuperOwner {
+        owner = _newOwner;
+    }
+
+    function transferSuperOwnership(address _newOwner) public onlySuperOwner {
+        superOwner = _newOwner;
+    }
+
+    function transferExecutorOwnership(address _newExecutor) public onlyOwnerOrSuperOwner {
+        emit OwnershipTransferred(executor, _newExecutor);
+        executor = _newExecutor;
     }
 }
 
@@ -67,7 +87,7 @@ contract ResultStorage is Owned, IResultStorage {
  
     function setOutcome (bytes32 _predictionId, uint8 _outcomeId)
             public 
-            onlyOwner
+            onlyAllowed
             notPaused {        
         
         results[_predictionId].outcomeId = _outcomeId;
@@ -91,18 +111,18 @@ contract ResultStorage is Owned, IResultStorage {
         require(false);
     }
 
-    function withdrawETH() external onlyOwner {
+    function withdrawETH() external onlyOwnerOrSuperOwner {
         uint balance = address(this).balance;
         owner.transfer(balance);
         emit Withdraw(balance);
     }
 
-    function withdrawTokens(uint _amount, address _token) external onlyOwner {
+    function withdrawTokens(uint _amount, address _token) external onlyOwnerOrSuperOwner {
         assert(IERC20(_token).transfer(owner, _amount));
         emit Withdraw(_amount);
     }
 
-    function pause(bool _paused) external onlyOwner {
+    function pause(bool _paused) external onlyOwnerOrSuperOwner {
         paused = _paused;
     }
 }
